@@ -1,0 +1,17 @@
+runtime: python310  # 파이썬 3.10 런타임 사용
+instance_class: F2  # 인스턴스 유형 (필요에 따라 조정 가능)
+
+entrypoint: waitress-serve --listen=*:$PORT 'podcast_app:main()'  # 애플리케이션 진입점
+
+env_variables:
+  GCS_BUCKET_NAME: "resonance-caster-audio-beta"  # GCS 버킷 이름
+  JWT_SECRET: "6DcNie7FmQ50f2uybimiEc4zQ2B9hCB2"      # JWT 시크릿 키 (프로덕션에서는 환경 변수로 관리)
+  PROJECT_ID: "resonance-caster-250422"       # GCP 프로젝트 ID
+  APP_FIRESTORE_DB: "resonance-caster"
+
+handlers:
+- url: /static
+  static_dir: static
+
+- url: /.*
+  script: auto

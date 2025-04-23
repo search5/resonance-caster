@@ -1,0 +1,148 @@
+{% extends "layout.jinja2" %}
+
+{% block content %}
+<div class="max-w-md mx-auto">
+    <div class="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+            <h1 class="text-2xl font-bold">회원가입</h1>
+            <p class="text-indigo-100">새 계정을 만들고 팟캐스트를 시작하세요.</p>
+        </div>
+
+        <div class="p-6">
+            <form id="register-form" class="space-y-6">
+                <!-- 사용자명 -->
+                <div>
+                    <label for="username" class="block text-sm font-medium text-gray-700 mb-1">사용자명</label>
+                    <input type="text" name="username" id="username" required class="input-standard w-full" placeholder="팟캐스트에 표시될 이름">
+                </div>
+
+                <!-- 이메일 -->
+                <div>
+                    <label for="email" class="block text-sm font-medium text-gray-700 mb-1">이메일</label>
+                    <input type="email" name="email" id="email" required class="input-standard w-full" placeholder="your@email.com">
+                </div>
+
+                <!-- 비밀번호 -->
+                <div>
+                    <label for="password" class="block text-sm font-medium text-gray-700 mb-1">비밀번호</label>
+                    <input type="password" name="password" id="password" required class="input-standard w-full" placeholder="8자 이상 입력">
+                    <p class="mt-1 text-sm text-gray-500">8자 이상의 안전한 비밀번호를 사용하세요.</p>
+                </div>
+
+                <!-- 비밀번호 확인 -->
+                <div>
+                    <label for="password_confirm" class="block text-sm font-medium text-gray-700 mb-1">비밀번호 확인</label>
+                    <input type="password" name="password_confirm" id="password_confirm" required class="input-standard w-full">
+                </div>
+
+                <!-- 약관 동의 -->
+                <div class="flex items-start">
+                    <input type="checkbox" name="agree_terms" id="agree_terms" required class="h-4 w-4 mt-1 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
+                    <label for="agree_terms" class="ml-2 block text-sm text-gray-700">
+                        <a href="#" class="text-indigo-600 hover:text-indigo-800">이용약관</a> 및 <a href="#" class="text-indigo-600 hover:text-indigo-800">개인정보처리방침</a>에 동의합니다.
+                    </label>
+                </div>
+
+                <!-- 오류 메시지 -->
+                <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
+                    <p class="font-medium">회원가입 오류</p>
+                    <p id="error-text"></p>
+                </div>
+
+                <!-- 제출 버튼 -->
+                <div>
+                    <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                        회원가입
+                    </button>
+                </div>
+
+                <!-- 로그인 링크 -->
+                <div class="text-center text-sm">
+                    <p>이미 계정이 있으신가요? <a href="{{ request.route_url('login') }}" class="text-indigo-600 hover:text-indigo-800 font-medium">로그인</a></p>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const registerForm = document.getElementById('register-form');
+        const errorMessage = document.getElementById('error-message');
+        const errorText = document.getElementById('error-text');
+
+        registerForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // 에러 메시지 초기화
+            errorMessage.classList.add('hidden');
+
+            // 비밀번호 일치 확인
+            const password = document.getElementById('password').value;
+            const passwordConfirm = document.getElementById('password_confirm').value;
+
+            if (password !== passwordConfirm) {
+                errorText.textContent = '비밀번호가 일치하지 않습니다.';
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // 비밀번호 길이 확인
+            if (password.length < 8) {
+                errorText.textContent = '비밀번호는 8자 이상이어야 합니다.';
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // 약관 동의 확인
+            if (!document.getElementById('agree_terms').checked) {
+                errorText.textContent = '이용약관 및 개인정보처리방침에 동의해주세요.';
+                errorMessage.classList.remove('hidden');
+                return;
+            }
+
+            // 폼 데이터 수집
+            const formData = {
+                username: document.getElementById('username').value,
+                email: document.getElementById('email').value,
+                password: password
+            };
+
+            // API 요청
+            fetch('/api/auth/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(formData)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    // 에러 표시
+                    errorText.textContent = data.error;
+                    errorMessage.classList.remove('hidden');
+                } else if (data.token) {
+                    // 토큰 저장
+                    localStorage.setItem('auth_token', data.token);
+                    localStorage.setItem('user_id', data.user_id);
+                    localStorage.setItem('username', data.username);
+
+                    // 로그인 상태로 설정
+                    setCookie('auth_token', data.token, 30); // 30일 유지
+
+                    // 가입 완료 후 홈으로 리다이렉트
+                    window.location.href = '/';
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                errorText.textContent = '네트워크 오류가 발생했습니다. 다시 시도해주세요.';
+                errorMessage.classList.remove('hidden');
+            });
+        });
+    });
+</script>
+{% endblock %}

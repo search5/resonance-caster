@@ -1,0 +1,328 @@
+{% extends "layout.jinja2" %}
+
+{% block extra_head %}
+<style>
+    .audio-player {
+        --seek-before-width: 0%;
+        --volume-before-width: 100%;
+        --buffered-width: 0%;
+    }
+    .audio-player .controls .time {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        margin-top: 6px;
+    }
+    .audio-player .play-btn {
+        position: relative;
+        z-index: 2;
+    }
+    .audio-player .seek-slider {
+        --seek-before-width: 0%;
+        --buffered-width: 0%;
+        position: relative;
+        z-index: 2;
+    }
+    .audio-player .seek-slider::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        width: var(--seek-before-width);
+        height: 4px;
+        background-color: #4f46e5;
+        border-radius: 9999px;
+        z-index: 0;
+    }
+    .audio-player .seek-slider::after {
+        content: '';
+        position: absolute;
+        left: 0;
+        width: var(--buffered-width);
+        height: 4px;
+        background-color: #e5e7eb;
+        border-radius: 9999px;
+        z-index: -1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+    <!-- 팟캐스트 헤더 -->
+    <div class="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- 커버 이미지 -->
+            <div class="w-48 h-48 flex-shrink-0 bg-gray-200 rounded-lg overflow-hidden shadow-lg">
+                {% if podcast.cover_image_url %}
+                    <img src="{{ podcast.cover_image_url }}" alt="{{ podcast.title }}" class="w-full h-full object-cover">
+                {% else %}
+                    <div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-gray-300 to-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- 팟캐스트 정보 -->
+            <div class="flex-1">
+                <h1 class="text-3xl font-bold mb-2">{{ podcast.title }}</h1>
+                <p class="text-indigo-100 mb-4">
+                    {% if podcast.created_at %}
+                        {{ podcast.created_at }}에 생성됨
+                    {% endif %}
+                </p>
+                <p class="text-lg mb-6">{{ podcast.description or '설명이 없습니다.' }}</p>
+
+                <div class="flex flex-wrap gap-3">
+                    <a href="{{ request.route_url('rss_feed', podcast_id=podcast.id) }}" target="_blank" class="inline-flex items-center bg-white text-indigo-700 hover:bg-indigo-100 px-4 py-2 rounded-lg font-medium transition duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 5c7.18 0 13 5.82 13 13M6 11a7 7 0 017 7m-6 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                        </svg>
+                        RSS 피드
+                    </a>
+
+                    {% if is_owner %}
+                        <a href="{{ request.route_url('upload') }}?podcast_id={{ podcast.id }}" class="inline-flex items-center bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg font-medium transition duration-300">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                            </svg>
+                            새 에피소드 추가
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 에피소드 목록 헤더 -->
+    <div class="border-b px-6 py-4 bg-gray-50">
+        <h2 class="text-xl font-semibold text-gray-800">에피소드 목록</h2>
+    </div>
+
+    <!-- 에피소드 목록 -->
+    <div class="divide-y">
+        {% for episode in episodes %}
+            <div class="p-6 hover:bg-gray-50 transition duration-300" id="episode-{{ episode.id }}">
+                <div class="flex flex-col mb-4">
+                    <h3 class="text-lg font-semibold text-gray-800 mb-1">{{ episode.title }}</h3>
+                    <div class="text-sm text-gray-500 mb-2">
+                        {% if episode.published_at %}
+                            {{ episode.published_at.strftime('%Y년 %m월 %d일') }}
+                        {% endif %}
+                        {% if episode.duration %}
+                            &bull; {{ episode.duration }}
+                            <!-- format_duration -->
+                        {% endif %}
+                    </div>
+                    <p class="text-gray-600 mb-4">{{ episode.description or '에피소드 설명이 없습니다.' }}</p>
+                </div>
+
+                <!-- 오디오 플레이어 -->
+                <div class="audio-player bg-gray-100 rounded-lg p-4" data-src="{{ episode.streaming_url }}">
+                    <div class="controls flex flex-col">
+                        <div class="flex items-center mb-2">
+                            <button class="play-btn bg-indigo-600 hover:bg-indigo-700 text-white rounded-full w-10 h-10 flex items-center justify-center mr-4 focus:outline-none" aria-label="재생/일시정지">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="play-icon h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd" />
+                                </svg>
+                                <svg xmlns="http://www.w3.org/2000/svg" class="pause-icon h-5 w-5 hidden" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                </svg>
+                            </button>
+
+                            <div class="flex-1">
+                                <input type="range" class="seek-slider w-full h-1 bg-gray-300 rounded-full appearance-none cursor-pointer" value="0" min="0" max="100">
+                                <div class="time flex justify-between text-xs text-gray-500 mt-1">
+                                    <span class="current-time">0:00</span>
+                                    <span class="total-time">0:00</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex justify-between items-center">
+                            <div class="download">
+                                <a href="{{ episode.audio_url }}" download class="text-indigo-600 hover:text-indigo-800 text-sm font-medium flex items-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    다운로드
+                                </a>
+                            </div>
+
+                            <div class="flex items-center">
+                                <button class="volume-btn mr-2 text-gray-600" aria-label="볼륨">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="volume-high-icon h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                    </svg>
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="volume-muted-icon h-5 w-5 hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z" />
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2" />
+                                    </svg>
+                                </button>
+                                <input type="range" class="volume-slider w-20 h-1 bg-gray-300 rounded-full appearance-none cursor-pointer" min="0" max="100" value="100">
+                            </div>
+                        </div>
+                    </div>
+                    <audio class="hidden"></audio>
+                </div>
+            </div>
+        {% else %}
+            <div class="p-12 text-center">
+                <p class="text-gray-500 text-lg mb-6">아직 등록된 에피소드가 없습니다.</p>
+
+                {% if is_owner %}
+                    <a href="{{ request.route_url('upload') }}?podcast_id={{ podcast.id }}" class="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition duration-300">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                        </svg>
+                        첫 에피소드 추가하기
+                    </a>
+                {% endif %}
+            </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const players = document.querySelectorAll('.audio-player');
+    let currentlyPlaying = null;
+
+    players.forEach(player => {
+        const audio = player.querySelector('audio');
+        const playBtn = player.querySelector('.play-btn');
+        const playIcon = playBtn.querySelector('.play-icon');
+        const pauseIcon = playBtn.querySelector('.pause-icon');
+        const seekSlider = player.querySelector('.seek-slider');
+        const currentTimeElem = player.querySelector('.current-time');
+        const totalTimeElem = player.querySelector('.total-time');
+        const volumeBtn = player.querySelector('.volume-btn');
+        const volumeHighIcon = volumeBtn.querySelector('.volume-high-icon');
+        const volumeMutedIcon = volumeBtn.querySelector('.volume-muted-icon');
+        const volumeSlider = player.querySelector('.volume-slider');
+
+        // 오디오 소스 설정
+        audio.src = player.dataset.src;
+
+        // 재생/일시정지 버튼 클릭
+        playBtn.addEventListener('click', () => {
+            if (audio.paused) {
+                // 다른 오디오가 재생 중이면 멈춤
+                if (currentlyPlaying && currentlyPlaying !== audio) {
+                    currentlyPlaying.pause();
+                    updatePlayPauseIcon(currentlyPlaying, true);
+                }
+
+                audio.play();
+                playIcon.classList.add('hidden');
+                pauseIcon.classList.remove('hidden');
+                currentlyPlaying = audio;
+            } else {
+                audio.pause();
+                playIcon.classList.remove('hidden');
+                pauseIcon.classList.add('hidden');
+                currentlyPlaying = null;
+            }
+        });
+
+        // 오디오 메타데이터 로드 완료 시
+        audio.addEventListener('loadedmetadata', () => {
+            totalTimeElem.textContent = formatTime(audio.duration);
+            seekSlider.max = Math.floor(audio.duration);
+        });
+
+        // 시간 업데이트
+        audio.addEventListener('timeupdate', () => {
+            seekSlider.value = Math.floor(audio.currentTime);
+            currentTimeElem.textContent = formatTime(audio.currentTime);
+
+            // 시크바 진행 상태 업데이트
+            const percent = (audio.currentTime / audio.duration) * 100;
+            seekSlider.style.setProperty('--seek-before-width', `${percent}%`);
+
+            // 버퍼링 상태 표시
+            if (audio.buffered.length > 0) {
+                const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
+                const bufferedPercent = (bufferedEnd / audio.duration) * 100;
+                seekSlider.style.setProperty('--buffered-width', `${bufferedPercent}%`);
+            }
+        });
+
+        // 재생 완료 시
+        audio.addEventListener('ended', () => {
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+            seekSlider.value = 0;
+            currentTimeElem.textContent = formatTime(0);
+            seekSlider.style.setProperty('--seek-before-width', '0%');
+            currentlyPlaying = null;
+        });
+
+        // 시크바 변경
+        seekSlider.addEventListener('input', () => {
+            currentTimeElem.textContent = formatTime(seekSlider.value);
+            seekSlider.style.setProperty('--seek-before-width', `${(seekSlider.value / audio.duration) * 100}%`);
+        });
+
+        seekSlider.addEventListener('change', () => {
+            audio.currentTime = seekSlider.value;
+        });
+
+        // 볼륨 버튼 클릭
+        volumeBtn.addEventListener('click', () => {
+            if (audio.volume > 0) {
+                audio.volume = 0;
+                volumeSlider.value = 0;
+                volumeHighIcon.classList.add('hidden');
+                volumeMutedIcon.classList.remove('hidden');
+            } else {
+                audio.volume = 1;
+                volumeSlider.value = 100;
+                volumeHighIcon.classList.remove('hidden');
+                volumeMutedIcon.classList.add('hidden');
+            }
+        });
+
+        // 볼륨 슬라이더 변경
+        volumeSlider.addEventListener('input', () => {
+            const volume = volumeSlider.value / 100;
+            audio.volume = volume;
+
+            if (volume > 0) {
+                volumeHighIcon.classList.remove('hidden');
+                volumeMutedIcon.classList.add('hidden');
+            } else {
+                volumeHighIcon.classList.add('hidden');
+                volumeMutedIcon.classList.remove('hidden');
+            }
+        });
+    });
+
+    // 재생/일시정지 아이콘 업데이트 헬퍼 함수
+    function updatePlayPauseIcon(audio, isPaused) {
+        const player = audio.closest('.audio-player');
+        const playIcon = player.querySelector('.play-icon');
+        const pauseIcon = player.querySelector('.pause-icon');
+
+        if (isPaused) {
+            playIcon.classList.remove('hidden');
+            pauseIcon.classList.add('hidden');
+        } else {
+            playIcon.classList.add('hidden');
+            pauseIcon.classList.remove('hidden');
+        }
+    }
+
+    // 시간 포맷 헬퍼 함수 (초 -> MM:SS)
+    function formatTime(seconds) {
+        const min = Math.floor(seconds / 60);
+        const sec = Math.floor(seconds % 60);
+        return `${min}:${sec < 10 ? '0' + sec : sec}`;
+    }
+});
+</script>
+{% endblock %}
