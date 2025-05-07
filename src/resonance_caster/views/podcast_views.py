@@ -124,10 +124,7 @@ def upload_process_view(request):
     gcs_service = GCSService()
 
     # 파일명 생성 (URL에 사용될 친화적인 이름)
-    from slugify import slugify
-    sanitized_title = slugify(title)
-    if not sanitized_title:
-        sanitized_title = f"episode-{uuid4().hex[:8]}"
+    sanitized_title = f"episode-{uuid4().hex[:8]}"
 
     # 오디오 파일 처리 및 GCS에 업로드
     with tempfile.NamedTemporaryFile(suffix='.mp3') as temp_file:
@@ -317,10 +314,10 @@ def stream_episode_view(request):
         bucket = client.bucket(bucket_name)
 
         # Firestore에 저장된 GCS 경로 사용
-        blob = bucket.blob(episode['audio_url'])
+        blob = bucket.get_blob(episode['audio_url'])
 
         # 파일 존재 확인
-        if not blob.exists():
+        if not blob:
             return HTTPNotFound()
 
         # HTTP 헤더 설정
@@ -334,7 +331,6 @@ def stream_episode_view(request):
         range_header = request.headers.get('Range', None)
         if range_header:
             # 범위 파싱 (예: bytes=0-1023)
-            print(range_header)
             ranges = range_header.replace('bytes=', '').split('-')
             start = int(ranges[0]) if ranges[0] else 0
             end = int(ranges[1]) if len(ranges) > 1 and ranges[1] else None
@@ -348,8 +344,6 @@ def stream_episode_view(request):
                 return Response(body=content, headers=headers, status=206)
             else:
                 content = blob.download_as_bytes(start=start)
-                print(dir(blob))
-                print(blob.size)
                 size = blob.size
                 headers['Content-Range'] = f'bytes {start}-{size - 1}/{size}'
                 headers['Content-Length'] = str(size - start)
