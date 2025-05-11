@@ -196,7 +196,7 @@ def rss_feed_view(request):
     # RSS XML 생성
     rss_xml = generate_rss_feed(request, podcast, episodes)
 
-    return Response(rss_xml, content_type='application/rss+xml')
+    return Response(rss_xml, content_type='text/xml')
 
 
 def generate_rss_feed(request, podcast, episodes):
@@ -206,7 +206,7 @@ def generate_rss_feed(request, podcast, episodes):
     host_url = request.host_url  # 호스트 URL (도메인)
 
     rss_template = """<?xml version="1.0" encoding="UTF-8"?>
-    <rss xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" version="2.0">
+    <rss xmlns:itunes="http://www.itunes.com/DTDs/Podcast-1.0.dtd" version="2.0">
     <channel>
         <title>{title}</title>
         <description><![CDATA[{description}]]></description>
@@ -231,13 +231,13 @@ def generate_rss_feed(request, podcast, episodes):
         else:
             pub_date_obj = episode['published_at']
 
-        pub_date = pub_date_obj.strftime('%a, %d %b %Y %H:%M:%S GMT')
+        pub_date = pub_date_obj.strftime('%a, %d %b %Y %H:%M:%S +0900')
 
         # 저장된 스트리밍 URL 사용 (상대 URL을 절대 URL로 변환)
         # streaming_url이 이미 절대 URL인 경우 그대로 사용
         streaming_url = episode.get('streaming_url', '')
         if streaming_url and not streaming_url.startswith('http'):
-            streaming_url = host_url + streaming_url.lstrip('/')
+            streaming_url = host_url + "/" + streaming_url.lstrip('/')
 
         item_template = """
         <item>
@@ -255,9 +255,9 @@ def generate_rss_feed(request, podcast, episodes):
             description=episode['description'] or '',
             pub_date=pub_date,
             audio_url=streaming_url,
-            length='0',  # 파일 크기를 계산하기 어려워 0으로 설정
+            length='',  # 파일 크기를 계산하기 어려워 0으로 설정
             duration=format_duration(episode['duration']),
-            guid=episode['id']
+            guid=streaming_url
         )
 
     # 사용자 정보 가져오기

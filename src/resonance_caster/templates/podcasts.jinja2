@@ -1,0 +1,59 @@
+{% extends "layout.jinja2" %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+    <h1 class="text-3xl font-bold mb-8 text-gray-800">모든 팟캐스트</h1>
+
+    <!-- 팟캐스트가 있는 경우 -->
+    {% if podcasts %}
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for podcast in podcasts %}
+        <div class="bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition duration-300">
+            <div class="h-48 bg-gray-200 relative">
+                {% if podcast.cover_image_url %}
+                    <img src="{{ podcast.cover_image_url }}" alt="{{ podcast.title }}" class="w-full h-full object-cover">
+                {% else %}
+                    <div class="w-full h-full flex items-center justify-center bg-gradient-to-r from-gray-300 to-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                        </svg>
+                    </div>
+                {% endif %}
+            </div>
+            <div class="p-5">
+                <h3 class="text-xl font-semibold mb-2 text-gray-800">{{ podcast.title }}</h3>
+                <p class="text-gray-600 mb-4 line-clamp-2">{{ podcast.description or '설명이 없습니다.' }}</p>
+                <a href="{{ request.route_url('podcast', podcast_id=podcast.id) }}" class="inline-block text-indigo-600 hover:text-indigo-800 font-medium">
+                    자세히 보기
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- 팟캐스트가 없는 경우 -->
+    {% else %}
+    <div class="text-center py-12">
+        <div class="mb-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 text-gray-400 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+            </svg>
+        </div>
+        <p class="text-gray-500 text-lg mb-6">아직 등록된 팟캐스트가 없습니다.</p>
+
+        {% if user %}
+            <a href="{{ request.route_url('upload') }}" class="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition duration-300">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                </svg>
+                첫 팟캐스트 만들기
+            </a>
+        {% else %}
+            <a href="{{ request.route_url('register') }}" class="inline-flex items-center bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition duration-300">
+                회원가입하고 팟캐스트 시작하기
+            </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
