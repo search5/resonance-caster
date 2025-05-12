@@ -5,6 +5,7 @@ Firebase 데이터베이스 서비스
 import traceback
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.aggregation import AggregationQuery
 from google.cloud.firestore_v1.base_query import FieldFilter
 import datetime
 from os import getenv
@@ -78,9 +79,22 @@ class FirestoreService:
             for podcast in query.stream():
                 podcast_data = podcast.to_dict()
                 podcast_data['id'] = podcast.id
+
+                # 에피소드 개수 계산
+                query = (self.db.collection('episodes')
+                         .where(filter=FieldFilter('podcast_id', '==', podcast.id)))
+
+                # 집계 쿼리 생성 및 COUNT 함수 적용
+                aggregation_query = AggregationQuery(query)
+                aggregation_query.count(alias='episode_count')
+
+                result = aggregation_query.get()[0][0]
+                podcast_data['episode_count'] = result.value
+
                 podcasts.append(podcast_data)
         except:
-            print('aa ::: ', traceback.print_exc())
+            # print('aa ::: ', traceback.print_exc())
+            pass
 
         return podcasts
 
@@ -208,4 +222,16 @@ class FirestoreService:
 
         # 에피소드 삭제
         self.db.collection('episodes').document(episode_id).delete()
+        return True
+
+    def update_podcast(self, podcast_id, data):
+        """팟캐스트 정보 업데이트"""
+        podcast_ref = self.db.collection('podcasts').document(podcast_id)
+
+        # 업데이트 시간 추가
+        data['updated_at'] = datetime.datetime.now()
+
+        # 데이터 업데이트
+        podcast_ref.update(data)
+
         return True

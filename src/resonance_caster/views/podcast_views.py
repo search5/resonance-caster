@@ -379,3 +379,340 @@ def record_episode_play(episode_id, request):
         timestamp=timestamp,
         user_id=user_id
     )
+
+
+# podcast_views.py에 추가할 새로운 뷰 함수
+
+@view_config(route_name='create_podcast', request_method='GET', renderer='templates/create_podcast.jinja2')
+def create_podcast_form_view(request):
+    """팟캐스트 생성 폼 뷰"""
+    user = get_user_from_request(request)
+
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    return {
+        'page_title': '새 팟캐스트 생성',
+        'user': user
+    }
+
+
+@view_config(route_name='create_podcast', request_method='POST')
+def create_podcast_process_view(request):
+    """팟캐스트 생성 처리 뷰"""
+    user = get_user_from_request(request)
+
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # 폼 데이터 가져오기
+    title = request.POST.get('title')
+    description = request.POST.get('description', '')
+    cover_image = request.POST.get('cover_image')
+
+    if not title:
+        # 필수 필드 검증
+        return HTTPFound(location=request.route_url('create_podcast', _query={'error': 'title_required'}))
+
+    # 서비스 초기화
+    firestore_service = FirestoreService()
+    gcs_service = GCSService()
+
+    # 커버 이미지 처리
+    cover_image_url = ''
+    if cover_image and hasattr(cover_image, 'file'):
+        try:
+            with tempfile.NamedTemporaryFile(suffix='.jpg') as temp_file:
+                cover_image.file.seek(0)
+                temp_file.write(cover_image.file.read())
+                temp_file.flush()
+
+                upload_result = gcs_service.upload_file(
+                    temp_file,
+                    content_type='image/jpeg',
+                    directory='podcast_covers'
+                )
+
+                # GCS 내부 경로를 저장
+                cover_image_url = upload_result['gcs_path']
+        except Exception as e:
+            print(f"이미지 업로드 오류: {e}")
+
+    # 팟캐스트 생성
+    podcast_id = firestore_service.create_podcast(
+        title=title,
+        description=description,
+        cover_image_url=cover_image_url,
+        user_id=user['id']
+    )
+
+    # 생성된 팟캐스트 페이지로 리다이렉트
+    return HTTPFound(location=request.route_url('podcast', podcast_id=podcast_id))
+
+
+@view_config(route_name='edit_podcast', request_method='GET', renderer='templates/edit_podcast.jinja2')
+def edit_podcast_form_view(request):
+    """팟캐스트 수정 폼 뷰"""
+    podcast_id = request.matchdict['podcast_id']
+
+    # 사용자 인증 확인
+    user = get_user_from_request(request)
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # 팟캐스트 정보 가져오기
+    firestore_service = FirestoreService()
+    podcast = firestore_service.get_podcast(podcast_id)
+
+    # 팟캐스트가 없거나 소유자가 아닌 경우
+    if not podcast or podcast['user_id'] != user['id']:
+        return HTTPForbidden()
+
+    return {
+        'page_title': '팟캐스트 수정',
+        'podcast': podcast,
+        'user': user
+    }
+
+
+@view_config(route_name='edit_podcast', request_method='POST')
+def edit_podcast_process_view(request):
+    """팟캐스트 수정 처리 뷰"""
+    podcast_id = request.matchdict['podcast_id']
+
+    # 사용자 인증 확인
+    user = get_user_from_request(request)
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # 팟캐스트 정보 가져오기
+    firestore_service = FirestoreService()
+    podcast = firestore_service.get_podcast(podcast_id)
+
+    # 팟캐스트가 없거나 소유자가 아닌 경우
+    if not podcast or podcast['user_id'] != user['id']:
+        return HTTPForbidden()
+
+    # 폼 데이터 가져오기
+    title = request.POST.get('title')
+    description = request.POST.get('description', '')
+    category = request.POST.get('category', '')
+    cover_image = request.POST.get('cover_image')
+    current_cover = request.POST.get('current_cover', '')
+
+    if not title:
+        # 필수 필드 검증
+        return HTTPFound(
+            location=request.route_url('edit_podcast', podcast_id=podcast_id, _query={'error': 'title_required'}))
+
+    # 업데이트할 데이터 준비
+    update_data = {
+        'title': title,
+        'description': description,
+        'category': category
+    }
+
+    # 새 커버 이미지가 있는 경우 처리
+    if cover_image and hasattr(cover_image, 'file') and cover_image.file:
+        try:
+            gcs_service = GCSService()
+
+            with tempfile.NamedTemporaryFile(suffix='.jpg') as temp_file:
+                cover_image.file.seek(0)
+                temp_file.write(cover_image.file.read())
+                temp_file.flush()
+
+                upload_result = gcs_service.upload_file(
+                    temp_file,
+                    content_type='image/jpeg',
+                    directory='podcast_covers'
+                )
+
+                # 기존 이미지가 있는 경우 삭제 (선택적)
+                if current_cover:
+                    try:
+                        # GCS 내부 경로 형식인 경우만 삭제 시도
+                        if not current_cover.startswith('http'):
+                            gcs_service.delete_file(current_cover)
+                    except Exception as e:
+                        print(f"기존 이미지 삭제 오류: {e}")
+
+                # 새 이미지 URL 업데이트
+                update_data['cover_image_url'] = upload_result['gcs_path']
+        except Exception as e:
+            print(f"이미지 업로드 오류: {e}")
+
+    # Firestore 업데이트
+    firestore_service.update_podcast(podcast_id, update_data)
+
+    # 수정된 팟캐스트 페이지로 리다이렉트
+    return HTTPFound(location=request.route_url('podcast', podcast_id=podcast_id))
+
+
+def update_episode(self, episode_id, data):
+    """에피소드 정보 업데이트"""
+    episode_ref = self.db.collection('episodes').document(episode_id)
+
+    # 업데이트 시간 추가
+    data['updated_at'] = datetime.datetime.now()
+
+    # 데이터 업데이트
+    episode_ref.update(data)
+
+    return True
+
+
+@view_config(route_name='edit_episode', request_method='GET', renderer='templates/edit_episode.jinja2')
+def edit_episode_form_view(request):
+    """에피소드 수정 폼 뷰"""
+    episode_id = request.matchdict['episode_id']
+
+    # 사용자 인증 확인
+    user = get_user_from_request(request)
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # 에피소드 정보 가져오기
+    firestore_service = FirestoreService()
+    episode = firestore_service.get_episode(episode_id)
+
+    if not episode:
+        return HTTPNotFound()
+
+    # 팟캐스트 정보 가져오기
+    podcast = firestore_service.get_podcast(episode['podcast_id'])
+
+    # 팟캐스트 소유자가 아닌 경우
+    if not podcast or podcast['user_id'] != user['id']:
+        return HTTPForbidden()
+
+    return {
+        'page_title': '에피소드 수정',
+        'episode': episode,
+        'podcast': podcast,
+        'user': user
+    }
+
+
+@view_config(route_name='edit_episode', request_method='POST')
+def edit_episode_process_view(request):
+    """에피소드 수정 처리 뷰"""
+    episode_id = request.matchdict['episode_id']
+
+    # 사용자 인증 확인
+    user = get_user_from_request(request)
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # 에피소드 정보 가져오기
+    firestore_service = FirestoreService()
+    episode = firestore_service.get_episode(episode_id)
+
+    if not episode:
+        return HTTPNotFound()
+
+    # 팟캐스트 정보 및 소유권 확인
+    podcast_id = episode['podcast_id']
+    podcast = firestore_service.get_podcast(podcast_id)
+
+    if not podcast or podcast['user_id'] != user['id']:
+        return HTTPForbidden()
+
+    # 폼 데이터 가져오기
+    title = request.POST.get('title')
+    description = request.POST.get('description', '')
+    episode_number = request.POST.get('episode_number', '')
+    season_number = request.POST.get('season_number', '')
+    is_published = 'is_published' in request.POST
+    audio_file = request.POST.get('audio_file')
+    current_audio_url = request.POST.get('current_audio_url', '')
+
+    if not title:
+        # 필수 필드 검증
+        return HTTPFound(
+            location=request.route_url('edit_episode', episode_id=episode_id, _query={'error': 'title_required'}))
+
+    # 업데이트할 데이터 준비
+    update_data = {
+        'title': title,
+        'description': description,
+        'is_published': is_published
+    }
+
+    # 에피소드 번호가 있는 경우
+    if episode_number and episode_number.isdigit():
+        update_data['episode_number'] = int(episode_number)
+
+    # 시즌 번호가 있는 경우
+    if season_number and season_number.isdigit():
+        update_data['season_number'] = int(season_number)
+
+    # 새 오디오 파일이 있는 경우 처리
+    if audio_file and hasattr(audio_file, 'file') and audio_file.file:
+        try:
+            gcs_service = GCSService()
+
+            with tempfile.NamedTemporaryFile(suffix='.mp3') as temp_file:
+                audio_file.file.seek(0)
+                temp_file.write(audio_file.file.read())
+                temp_file.flush()
+
+                # 오디오 길이 계산 (초 단위)
+                try:
+                    audio = AudioSegment.from_mp3(temp_file.name)
+                    duration = len(audio) // 1000  # 밀리초를 초로 변환
+                    update_data['duration'] = duration
+                except Exception as e:
+                    print(f"오디오 길이 계산 오류: {e}")
+
+                # 파일 위치를 처음으로 되돌리고 업로드
+                temp_file.seek(0)
+                upload_result = gcs_service.upload_file(
+                    temp_file,
+                    content_type='audio/mpeg',
+                    directory=f'podcasts/{podcast_id}'
+                )
+
+                # 기존 오디오 파일이 있는 경우 삭제 (선택적)
+                if current_audio_url:
+                    try:
+                        # GCS 내부 경로 형식인 경우만 삭제 시도
+                        if not current_audio_url.startswith('http'):
+                            gcs_service.delete_file(current_audio_url)
+                    except Exception as e:
+                        print(f"기존 오디오 파일 삭제 오류: {e}")
+
+                # 새 오디오 URL 업데이트
+                update_data['audio_url'] = upload_result['gcs_path']
+
+                # 스트리밍 URL 업데이트
+                from pyramid.path import DottedNameResolver
+                resolver = DottedNameResolver()
+                try:
+                    slugify = resolver.resolve('pyramid.util.slugify')
+                except ImportError:
+                    # 간단한 slugify 구현
+                    import re
+                    import unicodedata
+                    def slugify(text):
+                        text = unicodedata.normalize('NFKD', text)
+                        text = re.sub(r'[^\w\s-]', '', text).strip().lower()
+                        text = re.sub(r'[-\s]+', '-', text)
+                        return text if text else None
+
+                sanitized_title = slugify(title) or f"episode-{episode_id}"
+                streaming_url = f"/episodes/{episode_id}/{sanitized_title}.mp3"
+                update_data['streaming_url'] = streaming_url
+                update_data['filename'] = sanitized_title
+        except Exception as e:
+            print(f"오디오 파일 업로드 오류: {e}")
+
+    # Firestore 업데이트
+    firestore_service.update_episode(episode_id, update_data)
+
+    # 수정된 팟캐스트 페이지로 리다이렉
+    # Firestore 업데이트
+    firestore_service.update_episode(episode_id, update_data)
+
+    # 수정된 팟캐스트 페이지로 리다이렉트
+    return HTTPFound(location=request.route_url('podcast', podcast_id=podcast_id))

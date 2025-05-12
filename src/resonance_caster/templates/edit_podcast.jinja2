@@ -1,0 +1,67 @@
+{% extends "layout.jinja2" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <div class="bg-white rounded-xl shadow-md overflow-hidden mb-8">
+        <div class="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white">
+            <h1 class="text-2xl font-bold">팟캐스트 채널 정보 수정</h1>
+            <p class="text-indigo-100">{{ podcast.title }} 채널의 정보를 수정합니다.</p>
+        </div>
+
+        <div class="p-6">
+            <form action="{{ request.route_url('edit_podcast', podcast_id=podcast.id) }}" method="post" enctype="multipart/form-data" class="space-y-6">
+                <!-- 팟캐스트 제목 -->
+                <div>
+                    <label for="title" class="block text-sm font-medium text-gray-700 mb-1">팟캐스트 제목</label>
+                    <input type="text" name="title" id="title" required class="input-standard w-full" value="{{ podcast.title }}">
+                </div>
+
+                <!-- 팟캐스트 설명 -->
+                <div>
+                    <label for="description" class="block text-sm font-medium text-gray-700 mb-1">팟캐스트 설명</label>
+                    <textarea name="description" id="description" rows="4" class="input-standard w-full">{{ podcast.description }}</textarea>
+                </div>
+
+                <!-- 커버 이미지 업로드 -->
+                <div>
+                    <label for="cover_image" class="block text-sm font-medium text-gray-700 mb-1">커버 이미지</label>
+
+                    <div class="flex items-center space-x-6 mb-4">
+                        <!-- 현재 이미지 표시 -->
+                        <div class="w-32 h-32 bg-gray-200 rounded-lg overflow-hidden">
+                            {% if podcast.cover_image_url %}
+                                <img src="{{ podcast.cover_image_url }}" alt="현재 커버 이미지" class="w-full h-full object-cover">
+                            {% else %}
+                                <div class="w-full h-full flex items-center justify-center">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-10 w-10 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                    </svg>
+                                </div>
+                            {% endif %}
+                        </div>
+
+                        <div>
+                            <p class="text-sm text-gray-500 mb-2">새 이미지 업로드 (선택사항)</p>
+                            <input type="file" name="cover_image" id="cover_image" accept="image/jpeg, image/png" class="block w-full text-sm text-gray-500
+                                file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0
+                                file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-600
+                                hover:file:bg-indigo-100">
+                            <input type="hidden" name="current_cover" value="{{ podcast.cover_image_url or '' }}">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 제출 버튼 -->
+                <div class="flex justify-end space-x-3">
+                    <a href="{{ request.route_url('podcast', podcast_id=podcast.id) }}" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-6 rounded-lg transition duration-300">
+                        취소
+                    </a>
+                    <button type="submit" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg transition duration-300">
+                        저장하기
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
