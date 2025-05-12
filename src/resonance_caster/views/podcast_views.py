@@ -686,31 +686,13 @@ def edit_episode_process_view(request):
                 update_data['audio_url'] = upload_result['gcs_path']
 
                 # 스트리밍 URL 업데이트
-                from pyramid.path import DottedNameResolver
-                resolver = DottedNameResolver()
-                try:
-                    slugify = resolver.resolve('pyramid.util.slugify')
-                except ImportError:
-                    # 간단한 slugify 구현
-                    import re
-                    import unicodedata
-                    def slugify(text):
-                        text = unicodedata.normalize('NFKD', text)
-                        text = re.sub(r'[^\w\s-]', '', text).strip().lower()
-                        text = re.sub(r'[-\s]+', '-', text)
-                        return text if text else None
-
-                sanitized_title = slugify(title) or f"episode-{episode_id}"
+                sanitized_title = f"episode-{episode_id}"
                 streaming_url = f"/episodes/{episode_id}/{sanitized_title}.mp3"
                 update_data['streaming_url'] = streaming_url
                 update_data['filename'] = sanitized_title
         except Exception as e:
             print(f"오디오 파일 업로드 오류: {e}")
 
-    # Firestore 업데이트
-    firestore_service.update_episode(episode_id, update_data)
-
-    # 수정된 팟캐스트 페이지로 리다이렉
     # Firestore 업데이트
     firestore_service.update_episode(episode_id, update_data)
 
