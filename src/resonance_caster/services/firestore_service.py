@@ -235,3 +235,15 @@ class FirestoreService:
         podcast_ref.update(data)
 
         return True
+
+    def update_episode(self, edpisode_id, data):
+        """에피소드 정보 업데이트"""
+        episode_ref = self.db.collection('episodes').document(edpisode_id)
+
+        # 업데이트 시간 추가
+        data['updated_at'] = datetime.datetime.now()
+
+        # 데이터 업데이트
+        episode_ref.update(data)
+
+        return True
