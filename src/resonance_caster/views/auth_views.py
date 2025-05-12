@@ -78,16 +78,15 @@ def login_view(request):
         'username': user['username']
     })
 
-    if data.get('remember', False):
-        # 보안을 위해 쿠키는 HTTPS에서만 전송, JavaScript에서 접근 불가
-        response.set_cookie(
-            'auth_token',
-            token,
-            max_age=86400,  # 24시간
-            httponly=True,
-            # secure=request.scheme == 'https',
-            path='/'
-        )
+    # 보안을 위해 쿠키는 HTTPS에서만 전송, JavaScript에서 접근 불가
+    response.set_cookie(
+        'auth_token',
+        token,
+        max_age=86400,  # 24시간
+        httponly=True,
+        # secure=request.scheme == 'https',
+        path='/'
+    )
 
     return response
 

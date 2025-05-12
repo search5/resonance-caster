@@ -15,6 +15,8 @@ def includeme(config):
     config.add_route('stream_episode', '/episodes/{episode_id}/{filename}.mp3')
     config.add_route('edit_podcast', '/podcasts/{podcast_id}/edit')
     config.add_route('edit_episode', '/episodes/{episode_id}/edit')
+    config.add_route('statistics', '/statistics')
+    config.add_route('channel_statistics', '/channel_statistics')
 
     # API 라우트
     config.add_route('api_register', '/api/auth/register')

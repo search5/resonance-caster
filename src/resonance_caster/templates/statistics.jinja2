@@ -1,0 +1,84 @@
+{% extends "layout.jinja2" %}
+
+{% block content %}
+<div class="container mt-5">
+    <h1 class="mb-4">통계 대시보드</h1>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="card-title">요약</h2>
+            <p class="card-text">총 재생 횟수: <strong>{{ total_plays }}</strong></p>
+            <p class="card-text">팟캐스트 수: <strong>{{ podcasts|length }}</strong></p>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="card-title">일일 재생 추이</h2>
+            <canvas id="dailyChart" width="400" height="200"></canvas>
+        </div>
+    </div>
+
+    <h2 class="mb-3 mt-5">팟캐스트별 통계</h2>
+
+    {% for podcast in podcasts %}
+    <div class="card mb-4">
+        <div class="card-header">
+            <a href="{{ request.route_url('podcast', podcast_id=podcast.id) }}">{{ podcast.title }}</a>
+        </div>
+        <div class="card-body">
+            <p>총 재생 횟수: <strong>{{ podcast.total_plays }}</strong></p>
+            <p>에피소드 수: <strong>{{ podcast.episode_count }}</strong></p>
+
+            <h5 class="mt-4">에피소드별 재생 횟수</h5>
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>에피소드</th>
+                        <th>재생 횟수</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for episode in podcast.episodes %}
+                    <tr>
+                        <td>{{ episode.title }}</td>
+                        <td>{{ episode.plays }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // 일일 통계 차트
+    var dailyData = {{ daily_stats|tojson }};
+    var ctx = document.getElementById('dailyChart').getContext('2d');
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dailyData.map(item => item.date),
+            datasets: [{
+                label: '일일 재생 횟수',
+                data: dailyData.map(item => item.plays),
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+});
+</script>
+{% endblock %}

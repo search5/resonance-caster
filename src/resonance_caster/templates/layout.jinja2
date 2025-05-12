@@ -36,6 +36,16 @@
             <div class="flex items-center space-x-2" id="auth-menu">
                 {% if user %}
                     <span class="hidden md:inline">{{ user.username }}님</span>
+                    <div class="relative group">
+    <button class="hover:text-indigo-200 text-sm flex items-center">
+        통계 <svg class="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+    </button>
+    <div class="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-10 invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-all duration-300">
+        <a href="{{ request.route_url('statistics') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100">전체 통계</a>
+        <a href="{{ request.route_url('channel_statistics') }}" class="block px-4 py-2 text-sm text-gray-700 hover:bg-indigo-100">채널별 통계</a>
+    </div>
+</div>
+
                     <a href="{{ request.route_url('upload') }}" class="bg-indigo-500 hover:bg-indigo-600 px-3 py-1 rounded text-sm">업로드</a>
                     <a href="{{ request.route_url('logout') }}" class="hover:text-indigo-200 text-sm">로그아웃</a>
                 {% else %}

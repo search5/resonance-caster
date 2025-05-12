@@ -1,0 +1,236 @@
+{% extends "layout.jinja2" %}
+
+{% block content %}
+<div class="container mt-4">
+    <h1>채널별 통계</h1>
+
+    <!-- 디버깅 정보 출력 - 개발 중에만 사용 -->
+    {% if debug %}
+    <div class="alert alert-info">
+        <p>채널 수: {{ user_podcasts|length }}</p>
+        <p>날짜: {{ start_date }} ~ {{ end_date }}</p>
+    </div>
+    {% endif %}
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <!-- 채널 선택 드롭다운 -->
+            <form method="get" class="mb-3">
+                <div class="form-group">
+                    <label for="channel_id">채널 선택:</label>
+                    <select class="form-control" id="channel_id" name="channel_id" onchange="this.form.submit()">
+                        {% if not user_podcasts or user_podcasts|length == 0 %}
+                            <option value="">채널 없음</option>
+                        {% else %}
+                            {% for podcast in user_podcasts %}
+                                <option value="{{ podcast.id }}" {% if podcast.id == selected_channel_id %}selected{% endif %}>
+                                    {{ podcast.title }}
+                                </option>
+                            {% endfor %}
+                        {% endif %}
+                    </select>
+                </div>
+            </form>
+        </div>
+        <div class="col-md-6">
+            <!-- 날짜 범위 선택 -->
+            <form method="get" class="mb-3">
+                {% if selected_channel_id %}
+                    <input type="hidden" name="channel_id" value="{{ selected_channel_id }}">
+                {% endif %}
+                <div class="form-row d-flex">
+                    <div class="col me-2">
+                        <label for="start_date">시작일:</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date }}">
+                    </div>
+                    <div class="col me-2">
+                        <label for="end_date">종료일:</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date }}">
+                    </div>
+                    <div class="col-auto align-self-end">
+                        <button type="submit" class="btn btn-primary mt-2">조회</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    {% if not user_podcasts or user_podcasts|length == 0 %}
+        <div class="alert alert-warning">
+            팟캐스트 채널이 없습니다. <a href="{{ request.route_url('home') }}">홈으로 돌아가기</a>
+        </div>
+    {% elif selected_channel_id %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h3>주간 재생 통계 ({{ start_date }} ~ {{ end_date }})</h3>
+            </div>
+            <div class="card-body">
+                {% if episode_totals|length > 0 %}
+                    <!-- 차트 영역 추가 -->
+                    <div class="row mt-5">
+                        <div class="col-12">
+                            <h3>데이터 시각화</h3>
+                        </div>
+                    </div>
+
+                    <!-- 날짜별 재생수 차트 -->
+                    <div class="card mb-4 mt-4">
+                        <div class="card-header">
+                            <h4>날짜별 재생수</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container" style="position: relative; height:300px;">
+                                <canvas id="dailyPlayChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 에피소드 재생 분포 차트 -->
+                    <div class="card mb-4">
+                        <div class="card-header">
+                            <h4>에피소드별 재생 비율</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="chart-container" style="position: relative; height:300px;">
+                                <canvas id="episodeDistributionChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Chart.js 로드 및 차트 생성 스크립트 -->
+                    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+                    <script>
+                        document.addEventListener('DOMContentLoaded', function() {
+                            // 날짜 데이터 준비
+                            const dates = [
+                                {% for date in date_range %}
+                                "{{ date }}",
+                                {% endfor %}
+                            ];
+
+                            // 에피소드 데이터 준비
+                            const episodes = [
+                                {% for episode_id, total in episode_totals.items() %}
+                                {
+                                    id: "{{ episode_id }}",
+                                    title: "{% if episode_id in episodes_info %}{{ episodes_info[episode_id].title }}{% else %}알 수 없는 에피소드{% endif %}",
+                                    total: {{ total }}
+                                },
+                                {% endfor %}
+                            ];
+
+                            // 날짜별 재생수 데이터 모으기
+                            // 이 부분은 서버에서 제공된 데이터의 구조에 따라 조정해야 할 수 있습니다.
+                            // 현재 테이블 데이터에서 날짜별 합계 계산
+                            const dailyTotals = {};
+
+                            {% for date in date_range %}
+                                dailyTotals["{{ date }}"] = 0;
+                                {% for episode_id, total in episode_totals.items() %}
+                                    {% if episodes_daily_plays and episode_id in episodes_daily_plays and date in episodes_daily_plays[episode_id] %}
+                                        dailyTotals["{{ date }}"] += {{ episodes_daily_plays[episode_id][date]|default(0) }};
+                                    {% endif %}
+                                {% endfor %}
+                            {% endfor %}
+
+                            // 날짜별 재생수 차트 (막대 그래프)
+                            const dailyPlayCtx = document.getElementById('dailyPlayChart').getContext('2d');
+                            const dailyPlayChart = new Chart(dailyPlayCtx, {
+                                type: 'bar',
+                                data: {
+                                    labels: dates,
+                                    datasets: [{
+                                        label: '일일 재생수',
+                                        data: dates.map(date => dailyTotals[date] || 0),
+                                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                                        borderColor: 'rgba(54, 162, 235, 1)',
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        title: {
+                                            display: false
+                                        },
+                                        legend: {
+                                            display: false
+                                        }
+                                    },
+                                    scales: {
+                                        y: {
+                                            beginAtZero: true,
+                                            title: {
+                                                display: true,
+                                                text: '재생수'
+                                            }
+                                        },
+                                        x: {
+                                            ticks: {
+                                                autoSkip: true,
+                                                maxRotation: 45,
+                                                minRotation: 45
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+
+                            // 에피소드 재생 분포 파이 차트
+                            const distributionCtx = document.getElementById('episodeDistributionChart').getContext('2d');
+                            const distributionChart = new Chart(distributionCtx, {
+                                type: 'pie',
+                                data: {
+                                    labels: episodes.map(ep => {
+                                        const title = ep.title;
+                                        return title.length > 20 ? title.substring(0, 20) + '...' : title;
+                                    }),
+                                    datasets: [{
+                                        data: episodes.map(ep => ep.total),
+                                        backgroundColor: [
+                                            'rgba(255, 99, 132, 0.7)', 'rgba(54, 162, 235, 0.7)',
+                                            'rgba(255, 206, 86, 0.7)', 'rgba(75, 192, 192, 0.7)',
+                                            'rgba(153, 102, 255, 0.7)', 'rgba(255, 159, 64, 0.7)',
+                                            'rgba(199, 199, 199, 0.7)'
+                                        ],
+                                        borderColor: [
+                                            'rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)',
+                                            'rgba(255, 206, 86, 1)', 'rgba(75, 192, 192, 1)',
+                                            'rgba(153, 102, 255, 1)', 'rgba(255, 159, 64, 1)',
+                                            'rgba(199, 199, 199, 1)'
+                                        ],
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        title: {
+                                            display: false
+                                        },
+                                        tooltip: {
+                                            callbacks: {
+                                                title: function(tooltipItems) {
+                                                    return episodes[tooltipItems[0].dataIndex].title;
+                                                },
+                                                label: function(context) {
+                                                    const value = context.raw || 0;
+                                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                                    const percentage = Math.round((value / total) * 100);
+                                                    return `${value}회 (${percentage}%)`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        });
+                    </script>
+                {% endif %}
+            </div>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

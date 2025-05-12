@@ -698,3 +698,176 @@ def edit_episode_process_view(request):
 
     # 수정된 팟캐스트 페이지로 리다이렉트
     return HTTPFound(location=request.route_url('podcast', podcast_id=podcast_id))
+
+@view_config(route_name='statistics', renderer='templates/statistics.jinja2')
+def statistics_view(request):
+    """통계 페이지 뷰"""
+    # 사용자 인증 확인
+    user = get_user_from_request(request)
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # Firestore 서비스 초기화
+    firestore_service = FirestoreService()
+
+    # 사용자의 팟캐스트 목록 가져오기
+    user_podcasts = firestore_service.get_user_podcasts(user['id'])
+
+    podcasts_stats = []
+    total_plays = 0
+
+    # 각 팟캐스트의 통계 정보 수집
+    for podcast in user_podcasts:
+        # 팟캐스트에 속한 에피소드 가져오기
+        episodes = firestore_service.get_podcast_episodes(podcast['id'])
+
+        episode_stats = []
+        podcast_total_plays = 0
+
+        for episode in episodes:
+            # 에피소드 재생 횟수 가져오기
+            play_count = firestore_service.get_episode_play_count(episode['id'])
+            episode_stats.append({
+                'id': episode['id'],
+                'title': episode['title'],
+                'plays': play_count
+            })
+            podcast_total_plays += play_count
+
+        # 팟캐스트별 통계 정보
+        podcasts_stats.append({
+            'id': podcast['id'],
+            'title': podcast['title'],
+            'total_plays': podcast_total_plays,
+            'episode_count': len(episodes),
+            'episodes': episode_stats
+        })
+
+        total_plays += podcast_total_plays
+
+    # 최근 7일간의 일일 재생 횟수 가져오기
+    today = datetime.datetime.now()
+    daily_stats = []
+
+    for i in range(7):
+        date = today - datetime.timedelta(days=i)
+        date_str = date.strftime('%Y-%m-%d')
+        play_count = firestore_service.get_plays_by_date(user['id'], date_str)
+        daily_stats.append({
+            'date': date_str,
+            'plays': play_count
+        })
+
+    # 일일 통계는 날짜 순으로 정렬
+    daily_stats.reverse()
+
+    return {
+        'user': user,
+        'podcasts': podcasts_stats,
+        'total_plays': total_plays,
+        'daily_stats': daily_stats
+    }
+
+
+@view_config(route_name='channel_statistics', renderer='templates/channel_statistics.jinja2')
+def channel_statistics_view(request):
+    """팟캐스트 채널별 통계를 보여주는 페이지"""
+    # 사용자 정보 가져오기
+    user = get_user_from_request(request)
+    if not user:
+        return HTTPFound(location=request.route_url('login'))
+
+    # Firestore 서비스 초기화
+    firestore_service = FirestoreService()
+
+    # 사용자의 모든 팟캐스트 채널 가져오기
+    user_podcasts = firestore_service.get_user_podcasts(user['id'])
+
+    # 현재 날짜 기준으로 일주일 날짜 범위 생성
+    end_date = datetime.datetime.now()
+    start_date = end_date - datetime.timedelta(days=6)  # 7일 기간 (오늘 포함)
+
+    # URL 파라미터에서 날짜 범위와 채널 ID 가져오기
+    end_date_str = request.params.get('end_date', end_date.strftime('%Y-%m-%d'))
+    start_date_str = request.params.get('start_date', start_date.strftime('%Y-%m-%d'))
+    selected_channel_id = request.params.get('channel_id', '')
+
+    # 채널 선택 (사용자 채널이 있으면 첫 번째 채널을 기본값으로)
+    if not selected_channel_id and user_podcasts:
+        selected_channel_id = user_podcasts[0]['id']
+
+    try:
+        # 날짜 문자열을 datetime 객체로 변환
+        end_date = datetime.datetime.strptime(end_date_str, '%Y-%m-%d')
+        start_date = datetime.datetime.strptime(start_date_str, '%Y-%m-%d')
+    except ValueError:
+        # 날짜 형식이 잘못된 경우 기본값 사용
+        end_date = datetime.datetime.now()
+        start_date = end_date - datetime.timedelta(days=6)
+
+    # 표시할 날짜 범위 생성 (문자열 리스트)
+    start_date_str = start_date.strftime('%Y-%m-%d')
+    end_date_str = end_date.strftime('%Y-%m-%d')
+
+    date_range = []
+    current_date = start_date
+    while current_date <= end_date:
+        date_range.append(current_date.strftime('%Y-%m-%d'))
+        current_date += datetime.timedelta(days=1)
+
+    # 기본 응답 딕셔너리
+    response = {
+        'user': user,
+        'user_podcasts': user_podcasts,
+        'selected_channel_id': selected_channel_id,
+        'start_date': start_date_str,
+        'end_date': end_date_str,
+        'date_range': date_range,
+        'weekly_stats': {},
+        'episode_totals': {},
+        'episodes_info': {},
+        'debug': True  # 개발 중에만 사용
+    }
+
+    # 선택된 채널이 있을 때만 통계 데이터 가져오기
+    if selected_channel_id:
+        # 에피소드 정보 가져오기
+        episodes_info = firestore_service.get_episodes_info(selected_channel_id)
+        response['episodes_info'] = episodes_info
+
+        # 날짜별 통계 데이터 가져오기
+        weekly_stats = {}
+        for date_str in date_range:
+            plays = firestore_service.get_plays_by_date_for_channel(
+                user['id'],
+                selected_channel_id,
+                date_str
+            )
+            weekly_stats[date_str] = plays
+
+        response['weekly_stats'] = weekly_stats
+
+        # 에피소드별 재생 횟수 합계 계산
+        episode_totals = {}
+        for date_str, daily_data in weekly_stats.items():
+            for episode_id, play_count in daily_data.items():
+                if episode_id not in episode_totals:
+                    episode_totals[episode_id] = 0
+                episode_totals[episode_id] += play_count
+
+        response['episode_totals'] = episode_totals
+
+        # 에피소드별 날짜별 재생수 데이터 구성
+        episodes_daily_plays = {}
+        for episode_id in episode_totals.keys():
+            episodes_daily_plays[episode_id] = {}
+            for date_str in date_range:
+                if date_str in weekly_stats and episode_id in weekly_stats[date_str]:
+                    episodes_daily_plays[episode_id][date_str] = weekly_stats[date_str][episode_id]
+                else:
+                    episodes_daily_plays[episode_id][date_str] = 0
+
+        # 응답에 추가
+        response['episodes_daily_plays'] = episodes_daily_plays
+
+    return response

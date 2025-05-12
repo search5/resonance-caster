@@ -22,12 +22,6 @@
                     <input type="password" name="password" id="password" required class="input-standard w-full">
                 </div>
 
-                <!-- 로그인 상태 유지 -->
-                <div class="flex items-center">
-                    <input type="checkbox" name="remember" id="remember" class="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500">
-                    <label for="remember" class="ml-2 block text-sm text-gray-700">로그인 상태 유지</label>
-                </div>
-
                 <!-- 오류 메시지 -->
                 <div id="error-message" class="hidden bg-red-100 border-l-4 border-red-500 text-red-700 p-4" role="alert">
                     <p class="font-medium">로그인 오류</p>
@@ -90,11 +84,6 @@
                     localStorage.setItem('auth_token', data.token);
                     localStorage.setItem('user_id', data.user_id);
                     localStorage.setItem('username', data.username);
-
-                    // 로그인 상태 유지 옵션에 따라 쿠키 설정
-                    if (formData.remember) {
-                        setCookie('auth_token', data.token, 30); // 30일 유지
-                    }
 
                     // 리다이렉트 (이전 페이지 또는 홈으로)
                     const returnUrl = new URLSearchParams(window.location.search).get('return_url');

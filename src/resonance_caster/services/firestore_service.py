@@ -175,13 +175,8 @@ class FirestoreService:
         if user_id:
             play_data['user_id'] = user_id
 
-        play_ref.set(play_data)
+        self.db.collection('plays').add(play_data)
 
-        # 에피소드 재생 횟수 업데이트 (카운터)
-        episode_ref = self.db.collection('episodes').document(episode_id)
-        episode_ref.update({
-            'play_count': firestore.Increment(1)
-        })
 
     def update_episode_streaming_url(self, episode_id, streaming_url):
         """에피소드 스트리밍 URL 업데이트"""
@@ -247,3 +242,147 @@ class FirestoreService:
         episode_ref.update(data)
 
         return True
+
+    def get_episode_play_count(self, episode_id):
+        """에피소드의 재생 횟수를 반환합니다."""
+        try:
+            plays_ref = self.db.collection('episode_plays').where(filter=FieldFilter('episode_id', '==', episode_id))
+            plays = plays_ref.get()
+            return len(plays)
+        except Exception as e:
+            print(f"에피소드 재생 횟수 조회 오류: {e}")
+            return 0
+
+    def get_plays_by_date(self, user_id, date_str):
+        """특정 날짜의 사용자 팟캐스트 재생 횟수를 반환합니다."""
+        try:
+            # 날짜 문자열을 datetime 객체로 변환
+            from datetime import datetime, timedelta
+
+            # 날짜 시작과 끝 계산 (KST 기준)
+            start_date = datetime.strptime(date_str, '%Y-%m-%d')
+            end_date = start_date + timedelta(days=1)
+
+            # 사용자의 팟캐스트 가져오기
+            podcasts = self.get_user_podcasts(user_id)
+            podcast_ids = [podcast['id'] for podcast in podcasts]
+
+            # 각 팟캐스트의 에피소드 가져오기
+            episode_ids = []
+            for podcast_id in podcast_ids:
+                episodes = self.get_podcast_episodes(podcast_id)
+                episode_ids.extend([episode['id'] for episode in episodes])
+
+            # 해당 날짜의 재생 횟수 집계
+            play_count = 0
+            for episode_id in episode_ids:
+                plays_ref = (self.db.collection('episode_plays')
+                             .where(filter=FieldFilter('episode_id', '==', episode_id))
+                             .where(filter=FieldFilter('timestamp', '>=', start_date))
+                             .where(filter=FieldFilter('timestamp', '<', end_date)))
+                plays = plays_ref.get()
+                play_count += len(plays)
+
+            return play_count
+        except Exception as e:
+            print(f"날짜별 재생 횟수 조회 오류: {e}")
+            return 0
+
+    def get_plays_by_date_per_podcast(self, user_id, date_str):
+        """특정 날짜의 사용자 팟캐스트별 재생 횟수를 반환합니다."""
+        try:
+            # 날짜 시작과 끝 계산
+            start_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+            end_date = start_date + datetime.timedelta(days=1)
+
+            # 사용자의 팟캐스트 가져오기
+            podcasts = self.get_user_podcasts(user_id)
+
+            # 팟캐스트별 결과를 저장할 딕셔너리
+            results = {}
+
+            # 각 팟캐스트에 대해 처리
+            for podcast in podcasts:
+                podcast_id = podcast['id']
+                podcast_title = podcast.get('title', f'팟캐스트 {podcast_id}')
+
+                # 해당 팟캐스트의 에피소드 가져오기
+                episodes = self.get_podcast_episodes(podcast_id)
+                episode_ids = [episode['id'] for episode in episodes]
+
+                # 해당 날짜의 재생 횟수 집계
+                play_count = 0
+                for episode_id in episode_ids:
+                    plays_ref = (self.db.collection('episode_plays')
+                                 .where(filter=FieldFilter('episode_id', '==', episode_id))
+                                 .where(filter=FieldFilter('timestamp', '>=', start_date))
+                                 .where(filter=FieldFilter('timestamp', '<', end_date)))
+                    plays = plays_ref.get()
+                    play_count += len(plays)
+
+                # 결과에 추가
+                results[podcast_id] = {
+                    'title': podcast_title,
+                    'play_count': play_count
+                }
+
+            return results
+        except Exception as e:
+            print(f"팟캐스트별 날짜 재생 횟수 조회 오류: {e}")
+            return {}
+
+    def get_plays_by_date_for_channel(self, user_id, channel_id, date_str):
+        """특정 날짜, 특정 채널의 모든 에피소드 재생 통계를 가져옵니다."""
+        try:
+            # 날짜 시작과 끝 계산
+            start_date = datetime.datetime.strptime(date_str, '%Y-%m-%d')
+            end_date = start_date + datetime.timedelta(days=1)
+
+            # 채널의 모든 에피소드 가져오기
+            episodes = self.get_podcast_episodes(channel_id)
+            episode_ids = [episode['id'] for episode in episodes]
+
+            # 결과를 저장할 딕셔너리
+            episode_plays = {}
+
+            # 각 에피소드의 재생 횟수 집계
+            for episode_id in episode_ids:
+                plays_ref = (self.db.collection('episode_plays')
+                             .where(filter=FieldFilter('episode_id', '==', episode_id))
+                             .where(filter=FieldFilter('timestamp', '>=', start_date))
+                             .where(filter=FieldFilter('timestamp', '<', end_date)))
+                plays = plays_ref.get()
+                episode_plays[episode_id] = len(plays)
+
+            return episode_plays
+        except Exception as e:
+            print(f"Error getting plays for channel {channel_id} on {date_str}: {e}")
+            return {}
+
+    def get_episodes_info(self, channel_id):
+        """채널의 모든 에피소드 정보를 가져옵니다."""
+        try:
+            if not channel_id:
+                return {}
+
+            episodes_ref = self.db.collection('episodes').where(
+                filter=FieldFilter('podcast_id', '==', channel_id)
+            )
+
+            episodes_info = {}
+            for doc in episodes_ref.stream():
+                episode_data = doc.to_dict()
+                # 실제 데이터 구조에 맞는 에피소드 ID 형식 사용
+                episode_id = doc.id  # 또는 episode_data.get('podcast_id') 등 실제 구조에 맞게 조정
+
+                episodes_info[episode_id] = {
+                    'title': episode_data.get('title', '제목 없음'),
+                    'description': episode_data.get('description', ''),
+                    'publish_date': episode_data.get('published_at', '')  # 키 이름 수정
+                }
+
+            return episodes_info
+        except Exception as e:
+            print(f"Error getting episodes info for channel {channel_id}: {e}")
+            return {}
+
